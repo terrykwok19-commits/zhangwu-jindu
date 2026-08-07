@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>账务完成进度表</title>
+<style>
+  :root{
+    --bg:#0f1419; --bg2:#161c24; --panel:#1b222c; --panel2:#222b38;
+    --line:#2c3644; --line2:#3a4658;
+    --txt:#e6edf3; --txt2:#9aa7b5; --txt3:#6b7886;
+    --accent:#4f9dff; --accent2:#3b82f6;
+    --done:#2ea043; --done2:#1f7a32; --done-bg:rgba(46,160,67,.16);
+    --na:#39424f; --warn:#e3a008;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#1a2330 0%,var(--bg) 55%);
+    color:var(--txt); min-height:100vh; padding:22px 18px 60px;
+  }
+  .wrap{max-width:1280px;margin:0 auto}
+  header.top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;justify-content:space-between;margin-bottom:18px}
+  .title h1{font-size:22px;margin:0;letter-spacing:.5px}
+  .title p{margin:4px 0 0;color:var(--txt2);font-size:13px}
+  .actions{display:flex;flex-wrap:wrap;gap:8px}
+  button.btn{
+    background:var(--panel2);color:var(--txt);border:1px solid var(--line2);
+    padding:8px 13px;border-radius:9px;font-size:13px;cursor:pointer;transition:.15s;
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  button.btn:hover{border-color:var(--accent);color:#fff;transform:translateY(-1px)}
+  button.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff}
+  button.btn.primary:hover{background:var(--accent)}
+
+  /* summary cards */
+  .summary{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:14px;margin-bottom:18px}
+  @media(max-width:860px){.summary{grid-template-columns:1fr 1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .card .lab{font-size:12px;color:var(--txt2);margin-bottom:6px}
+  .card .val{font-size:26px;font-weight:700}
+  .card .val small{font-size:14px;color:var(--txt3);font-weight:500}
+  .donut{display:flex;align-items:center;gap:16px}
+  .ring{--p:0;width:78px;height:78px;border-radius:50%;flex:none;
+    background:conic-gradient(var(--done) calc(var(--p)*1%),var(--line2) 0);
+    display:flex;align-items:center;justify-content:center;position:relative}
+  .ring::after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--panel)}
+  .ring span{position:relative;z-index:1;font-size:16px;font-weight:700}
+
+  /* months bar */
+  .months{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .monthchip{background:var(--panel);border:1px solid var(--line);color:var(--txt2);
+    padding:7px 14px;border-radius:11px;cursor:pointer;font-size:13px;transition:.15s;
+    display:flex;flex-direction:column;align-items:center;min-width:64px;line-height:1.3}
+  .monthchip .mp{font-size:11px;color:var(--txt3);margin-top:3px}
+  .monthchip:hover{color:var(--txt);border-color:var(--accent)}
+  .monthchip.active{background:var(--accent2);border-color:var(--accent2);color:#fff}
+  .monthchip.active .mp{color:rgba(255,255,255,.85)}
+  .monthchip.add{color:var(--accent);font-size:18px;font-weight:700;min-width:44px;justify-content:center}
+  .monthchip.nav{font-size:15px;min-width:40px;justify-content:center;color:var(--txt2)}
+
+  /* table */
+  .tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto}
+  table{border-collapse:separate;border-spacing:0;width:100%;min-width:720px}
+  th,td{padding:0;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+  thead th{position:sticky;top:0;z-index:3;background:var(--bg2);
+    font-size:12.5px;font-weight:600;color:var(--txt);text-align:center;vertical-align:middle}
+  thead th .step-name{padding:11px 10px;display:block;line-height:1.35}
+  .th-company{left:0;z-index:4;text-align:left !important;min-width:210px}
+  .th-progress{min-width:150px}
+  tbody td.company{position:sticky;left:0;z-index:2;background:var(--panel);
+    font-size:13.5px;padding:0 12px;min-width:210px;white-space:nowrap}
+  tbody td.company .cname{display:flex;align-items:center;gap:8px;height:46px}
+  .delx{margin-left:auto;cursor:pointer;color:var(--txt3);font-size:15px;line-height:1;
+    border:none;background:none;padding:2px 4px;border-radius:5px;opacity:0;transition:.15s}
+  tbody tr:hover .delx{opacity:1}
+  .delx:hover{color:#ff6b6b;background:rgba(255,107,107,.12)}
+  .cell{height:46px;width:100%;min-width:96px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;user-select:none;font-size:18px;color:var(--txt3);transition:background .12s,color .12s}
+  .cell:hover{background:var(--panel2)}
+  .cell.done{color:var(--done);background:var(--done-bg);font-weight:700}
+  .cell.na{color:var(--txt3);background:var(--na);cursor:not-allowed;font-size:15px}
+  .cell.na:hover{background:var(--na)}
+  .progress-cell{padding:0 12px !important;width:150px}
+  .pbar{height:7px;border-radius:5px;background:var(--line2);overflow:hidden}
+  .pbar > i{display:block;height:100%;background:linear-gradient(90deg,var(--done2),var(--done));width:0;transition:width .35s}
+  .pct{font-size:12px;color:var(--txt2);margin-top:4px;text-align:right}
+  .pct b{color:var(--txt)}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;color:var(--txt2);font-size:13px}
+  .legend i{font-style:normal;display:inline-flex;width:18px;height:18px;border-radius:5px;
+    align-items:center;justify-content:center;margin-right:6px;vertical-align:-4px;font-size:12px}
+  .lg-done{background:var(--done-bg);color:var(--done);border:1px solid var(--done2)}
+  .lg-todo{background:var(--panel2);color:var(--txt3);border:1px solid var(--line2)}
+  .lg-na{background:var(--na);color:var(--txt3);border:1px solid var(--line2)}
+
+  .colhead-del{position:absolute;top:2px;right:4px;opacity:0;color:#ff6b6b;font-size:13px;
+    cursor:pointer;background:none;border:none;transition:.15s}
+  thead th:hover .colhead-del{opacity:1}
+  .step-wrap{position:relative;display:block}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--panel2);border:1px solid var(--line2);color:var(--txt);padding:11px 20px;
+    border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media print{
+    body{background:#fff;color:#000;padding:0}
+    header .actions,.months,.legend,.delx,.colhead-del{display:none !important}
+    .tablecard,.card{border-color:#999;background:#fff}
+    thead th,tbody td.company{background:#f2f2f2 !important}
+    .cell.done{color:#000;background:#cfe9d4 !important}
+    .ring{background:conic-gradient(#2ea043 calc(var(--p)*1%),#ccc 0) !important}
+    .ring::after{background:#fff !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="title">
+      <h1>账务完成进度表</h1>
+      <p>点击单元格即可勾选 / 取消，标记该步骤是否已完成 · 数据按月份分别保存于本机浏览器</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="addCompany">＋ 添加公司</button>
+      <button class="btn" id="addStep">＋ 添加步骤</button>
+      <button class="btn" id="exportBtn">导出</button>
+      <button class="btn" id="importBtn">导入</button>
+      <button class="btn" id="printBtn">打印</button>
+      <button class="btn" id="resetBtn">重置本月</button>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="card donut">
+      <div class="ring" id="ring"><span id="ringTxt">0%</span></div>
+      <div>
+        <div class="lab" id="ringLab">本月完成进度</div>
+        <div class="val" id="sumDone">0<small> / 0 步</small></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="lab">已完成公司</div>
+      <div class="val" id="sumComp">0<small> / 0 家</small></div>
+    </div>
+    <div class="card">
+      <div class="lab">步骤总数</div>
+      <div class="val" id="sumSteps">0</div>
+    </div>
+    <div class="card">
+      <div class="lab">当前月份</div>
+      <div class="val" id="sumMonth" style="font-size:18px">—</div>
+      <div class="lab" style="margin-top:6px">已跟踪 <span id="sumMonths">0</span> 个月</div>
+    </div>
+  </section>
+
+  <div class="months" id="months"></div>
+
+  <div class="tablecard">
+    <table id="grid">
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <span><i class="lg-done">✓</i>已完成</span>
+    <span><i class="lg-todo">□</i>待办</span>
+    <span style="margin-left:auto;color:var(--txt3)">提示：顶部可切换 / 新建月份，勾选按月份独立保存；悬停公司或步骤可删除。</span>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="application/json" style="display:none">
+<div class="toast" id="toast"></div>
+
+<script>
+const STORE_KEY = "jinada_progress_v2";
+
+const COMPANIES = [
+  "广州金哪达贸易有限公司","广州金哪达科技有限公司","广州超影拍科技有限公司",
+  "广州提斯利科技有限公司","广州拍剪科技有限公司","广州粤书亚贸易有限公司",
+  "广州频闪传媒有限公司","广州灵感矩阵科技有限公司","广州磐实供应链有限公司"
+];
+const STEPS = ["收款","付款","销项","进项","报销","工资","增值税及附加税、印花税（季度申报）","折旧摊销"];
+const NA = {};
+
+function currentMonthKey(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+}
+
+// ---- state ----
+let store = load();
+let month = store.sel || store.months[0];
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const d = JSON.parse(raw);
+      if(d && d.companies && d.done) return d;
+    }
+  }catch(e){}
+  const mk = currentMonthKey();
+  return {
+    companies: COMPANIES.slice(),
+    steps: STEPS.slice(),
+    na: JSON.parse(JSON.stringify(NA)),
+    months: [mk],
+    sel: mk,
+    done: {}
+  };
+}
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){}
+}
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove("show"),1700);
+}
+
+// ---- month helpers ----
+function shiftMonth(key, delta){
+  let [y,m] = key.split("-").map(Number);
+  m += delta;
+  if(m<1){m=12;y--;} else if(m>12){m=1;y++;}
+  return y+"-"+String(m).padStart(2,"0");
+}
+function ensureMonth(key){
+  if(!store.months.includes(key)){ store.months.push(key); store.months.sort(); }
+}
+function monthLabel(key){ const [y,m]=key.split("-"); return y+"年"+Number(m)+"月"; }
+function monthShort(key){ const [,m]=key.split("-"); return Number(m)+"月"; }
+
+// ---- cell helpers ----
+function isNA(company, step){
+  const na = store.na[company];
+  return Array.isArray(na) && na.includes(step);
+}
+function isDone(m, company, step){
+  return !!(store.done[m] && store.done[m][company] && store.done[m][company][step]);
+}
+function setDone(m, company, step, val){
+  store.done[m] = store.done[m] || {};
+  store.done[m][company] = store.done[m][company] || {};
+  if(val) store.done[m][company][step] = true;
+  else delete store.done[m][company][step];
+  save();
+}
+function activeSteps(company){ return store.steps.filter(s=>!isNA(company,s)).length; }
+function doneSteps(company, m){ return store.steps.filter(s=>!isNA(company,s) && isDone(m,company,s)).length; }
+function monthPct(m){
+  let a=0,d=0; store.companies.forEach(c=>{ a+=activeSteps(c); d+=doneSteps(c,m); });
+  return a? Math.round(d/a*100):0;
+}
+
+// ---- render ----
+function renderMonths(){
+  const el = document.getElementById("months");
+  el.innerHTML = "";
+
+  const prev = document.createElement("div");
+  prev.className = "monthchip nav"; prev.textContent = "◀"; prev.title = "上个月";
+  prev.onclick = ()=>{ const k=shiftMonth(month,-1); ensureMonth(k); month=k; store.sel=k; save(); renderAll(); };
+  el.appendChild(prev);
+
+  store.months.forEach(k=>{
+    const c = document.createElement("div");
+    c.className = "monthchip" + (k===month?" active":"");
+    c.innerHTML = '<span>'+monthShort(k)+'</span><span class="mp">'+monthPct(k)+'%</span>';
+    c.onclick = ()=>{ month=k; store.sel=k; save(); renderAll(); };
+    el.appendChild(c);
+  });
+
+  const add = document.createElement("div");
+  add.className = "monthchip add"; add.textContent = "＋"; add.title = "新建月份";
+  add.onclick = ()=>{
+    const sug = shiftMonth(store.months[store.months.length-1], 1);
+    const inp = prompt("输入月份（格式 YYYY-MM，如 2026-09）：", sug);
+    if(!inp) return;
+    const key = inp.trim();
+    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)){ toast("格式不正确，应为 YYYY-MM"); return; }
+    ensureMonth(key); month=key; store.sel=key; save(); renderAll(); toast("已新建月份 "+monthLabel(key));
+  };
+  el.appendChild(add);
+
+  const next = document.createElement("div");
+  next.className = "monthchip nav"; next.textContent = "▶"; next.title = "下个月";
+  next.onclick = ()=>{ const k=shiftMonth(month,1); ensureMonth(k); month=k; store.sel=k; save(); renderAll(); };
+  el.appendChild(next);
+}
+
+function renderGrid(){
+  const head = document.getElementById("thead");
+  const body = document.getElementById("tbody");
+  head.innerHTML = ""; body.innerHTML = "";
+
+  const tr = document.createElement("tr");
+  const th0 = document.createElement("th");
+  th0.className = "th-company";
+  th0.textContent = "公司名称";
+  tr.appendChild(th0);
+
+  store.steps.forEach(step=>{
+    const th = document.createElement("th");
+    const wrap = document.createElement("div");
+    wrap.className = "step-wrap";
+    const nm = document.createElement("span");
+    nm.className = "step-name"; nm.textContent = step;
+    const del = document.createElement("button");
+    del.className = "colhead-del"; del.textContent = "✕";
+    del.title = "删除该步骤";
+    del.onclick = (e)=>{ e.stopPropagation(); removeStep(step); };
+    wrap.appendChild(nm); wrap.appendChild(del);
+    th.appendChild(wrap);
+    tr.appendChild(th);
+  });
+
+  const thp = document.createElement("th");
+  thp.className = "th-progress"; thp.textContent = "进度";
+  tr.appendChild(thp);
+  head.appendChild(tr);
+
+  store.companies.forEach(company=>{
+    const r = document.createElement("tr");
+    const tdC = document.createElement("td");
+    tdC.className = "company";
+    const cn = document.createElement("div");
+    cn.className = "cname";
+    const span = document.createElement("span"); span.textContent = company;
+    const del = document.createElement("button");
+    del.className = "delx"; del.textContent = "✕"; del.title = "删除该公司";
+    del.onclick = (e)=>{ e.stopPropagation(); removeCompany(company); };
+    cn.appendChild(span); cn.appendChild(del);
+    tdC.appendChild(cn);
+    r.appendChild(tdC);
+
+    store.steps.forEach(step=>{
+      const td = document.createElement("td");
+      const cell = document.createElement("div");
+      if(isNA(company, step)){
+        cell.className = "cell na"; cell.textContent = "—";
+      }else{
+        const done = isDone(month, company, step);
+        cell.className = "cell" + (done?" done":"");
+        cell.textContent = done ? "✓" : "□";
+        cell.onclick = ()=>{
+          const nd = !isDone(month, company, step);
+          setDone(month, company, step, nd);
+          cell.className = "cell" + (nd?" done":"");
+          cell.textContent = nd ? "✓" : "□";
+          updateSummary(); renderMonths();
+        };
+      }
+      td.appendChild(cell);
+      r.appendChild(td);
+    });
+
+    const tdp = document.createElement("td");
+    tdp.className = "progress-cell";
+    const active = activeSteps(company);
+    const done = doneSteps(company, month);
+    const pct = active? Math.round(done/active*100):0;
+    tdp.innerHTML = '<div class="pbar"><i style="width:'+pct+'%"></i></div>'+
+                    '<div class="pct"><b>'+pct+'%</b> · '+done+'/'+active+'</div>';
+    r.appendChild(tdp);
+    body.appendChild(r);
+  });
+}
+
+function computeSummary(){
+  let totalActive=0, totalDone=0, compDone=0;
+  store.companies.forEach(company=>{
+    const active = activeSteps(company);
+    const done = doneSteps(company, month);
+    totalActive += active; totalDone += done;
+    if(active>0 && done===active) compDone++;
+  });
+  return {totalActive,totalDone,compDone,totalComp:store.companies.length};
+}
+
+function updateSummary(){
+  const s = computeSummary();
+  const pct = s.totalActive? Math.round(s.totalDone/s.totalActive*100):0;
+  document.getElementById("ring").style.setProperty("--p", pct);
+  document.getElementById("ringTxt").textContent = pct+"%";
+  document.getElementById("ringLab").textContent = monthLabel(month)+" 完成进度";
+  document.getElementById("sumDone").innerHTML = s.totalDone+'<small> / '+s.totalActive+' 步</small>';
+  document.getElementById("sumComp").innerHTML = s.compDone+'<small> / '+s.totalComp+' 家</small>';
+  document.getElementById("sumSteps").textContent = store.steps.length;
+  document.getElementById("sumMonth").textContent = monthLabel(month);
+  document.getElementById("sumMonths").textContent = store.months.length;
+}
+
+function renderAll(){ renderMonths(); renderGrid(); updateSummary(); }
+
+// ---- mutations ----
+function removeCompany(company){
+  if(!confirm("确定删除公司「"+company+"」？该公司在所有月份的勾选也会清除。")) return;
+  store.companies = store.companies.filter(c=>c!==company);
+  if(store.na[company]) delete store.na[company];
+  for(const m in store.done) if(store.done[m][company]) delete store.done[m][company];
+  save(); renderAll(); toast("已删除公司");
+}
+function removeStep(step){
+  if(!confirm("确定删除步骤「"+step+"」？该步骤在所有月份的勾选也会清除。")) return;
+  store.steps = store.steps.filter(s=>s!==step);
+  for(const c in store.na) store.na[c] = store.na[c].filter(s=>s!==step);
+  for(const m in store.done) for(const c in store.done[m]) delete store.done[m][c][step];
+  save(); renderAll(); toast("已删除步骤");
+}
+
+document.getElementById("addCompany").onclick = ()=>{
+  const name = prompt("输入新公司名称：");
+  if(!name) return;
+  if(store.companies.includes(name)){ toast("该公司已存在"); return; }
+  store.companies.push(name);
+  save(); renderAll(); toast("已添加公司");
+};
+document.getElementById("addStep").onclick = ()=>{
+  const name = prompt("输入新步骤名称：");
+  if(!name) return;
+  if(store.steps.includes(name)){ toast("该步骤已存在"); return; }
+  store.steps.push(name);
+  save(); renderAll(); toast("已添加步骤");
+};
+document.getElementById("resetBtn").onclick = ()=>{
+  if(!confirm("确定清空「"+monthLabel(month)+"」的全部勾选记录？")) return;
+  store.done[month] = {};
+  save(); renderAll(); toast("已重置 "+monthLabel(month));
+};
+document.getElementById("printBtn").onclick = ()=>window.print();
+
+document.getElementById("exportBtn").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "账务进度_备份_"+new Date().toISOString().slice(0,10)+".json";
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("已导出备份");
+};
+document.getElementById("importBtn").onclick = ()=>document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange = (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const d = JSON.parse(r.result);
+      if(d && d.companies && d.done){
+        store = d;
+        if(!store.sel || !store.months.includes(store.sel)) store.sel = store.months[0];
+        month = store.sel;
+        save(); renderAll(); toast("已导入备份");
+      } else toast("文件格式不正确");
+    }catch(err){ toast("导入失败：解析错误"); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+};
+
+renderAll();
+</script>
+</body>
+</html>

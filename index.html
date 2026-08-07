@@ -11,7 +11,7 @@
     --txt:#e6edf3; --txt2:#9aa7b5; --txt3:#6b7886;
     --accent:#4f9dff; --accent2:#3b82f6;
     --done:#2ea043; --done2:#1f7a32; --done-bg:rgba(46,160,67,.16);
-    --na:#39424f; --warn:#e3a008;
+    --na:#39424f; --warn:#e3a008; --err:#ff6b6b;
     --radius:12px;
   }
   *{box-sizing:border-box}
@@ -34,6 +34,13 @@
   button.btn:hover{border-color:var(--accent);color:#fff;transform:translateY(-1px)}
   button.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff}
   button.btn.primary:hover{background:var(--accent)}
+
+  .sync-badge{display:inline-block;font-size:12px;padding:2px 10px;border-radius:999px;
+    border:1px solid var(--line2);color:var(--txt3);margin-left:10px;vertical-align:1px}
+  .sync-badge.ok{color:var(--done);border-color:var(--done2);background:var(--done-bg)}
+  .sync-badge.err{color:var(--err);border-color:var(--err);background:rgba(255,107,107,.12)}
+  .sync-badge.syncing{color:var(--warn);border-color:var(--warn)}
+  .sync-badge.local{color:var(--txt3)}
 
   /* summary cards */
   .summary{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:14px;margin-bottom:18px}
@@ -76,7 +83,7 @@
   .delx{margin-left:auto;cursor:pointer;color:var(--txt3);font-size:15px;line-height:1;
     border:none;background:none;padding:2px 4px;border-radius:5px;opacity:0;transition:.15s}
   tbody tr:hover .delx{opacity:1}
-  .delx:hover{color:#ff6b6b;background:rgba(255,107,107,.12)}
+  .delx:hover{color:var(--err);background:rgba(255,107,107,.12)}
   .cell{height:46px;width:100%;min-width:96px;display:flex;align-items:center;justify-content:center;
     cursor:pointer;user-select:none;font-size:18px;color:var(--txt3);transition:background .12s,color .12s}
   .cell:hover{background:var(--panel2)}
@@ -96,10 +103,23 @@
   .lg-todo{background:var(--panel2);color:var(--txt3);border:1px solid var(--line2)}
   .lg-na{background:var(--na);color:var(--txt3);border:1px solid var(--line2)}
 
-  .colhead-del{position:absolute;top:2px;right:4px;opacity:0;color:#ff6b6b;font-size:13px;
+  .colhead-del{position:absolute;top:2px;right:4px;opacity:0;color:var(--err);font-size:13px;
     cursor:pointer;background:none;border:none;transition:.15s}
   thead th:hover .colhead-del{opacity:1}
   .step-wrap{position:relative;display:block}
+
+  /* sync modal */
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal-mask.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:22px 24px;width:min(500px,92vw);max-height:86vh;overflow:auto}
+  .modal h3{margin:0 0 14px}
+  .modal .row{margin-bottom:12px}
+  .modal .row label{display:block;font-size:12px;color:var(--txt2);margin-bottom:5px}
+  .modal input,.modal select{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line2);background:var(--bg2);color:var(--txt);font-size:13px}
+  .modal input:focus,.modal select:focus{outline:none;border-color:var(--accent)}
+  .modal .hint{font-size:12px;color:var(--txt3);line-height:1.7;margin:10px 0 0}
+  .modal .status{font-size:13px;color:var(--txt2);min-height:18px}
+  .modal-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 
   .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);
     background:var(--panel2);border:1px solid var(--line2);color:var(--txt);padding:11px 20px;
@@ -108,7 +128,7 @@
 
   @media print{
     body{background:#fff;color:#000;padding:0}
-    header .actions,.months,.legend,.delx,.colhead-del{display:none !important}
+    header .actions,.months,.legend,.delx,.colhead-del,.sync-badge{display:none !important}
     .tablecard,.card{border-color:#999;background:#fff}
     thead th,tbody td.company{background:#f2f2f2 !important}
     .cell.done{color:#000;background:#cfe9d4 !important}
@@ -122,9 +142,12 @@
   <header class="top">
     <div class="title">
       <h1>账务完成进度表</h1>
-      <p>点击单元格即可勾选 / 取消，标记该步骤是否已完成 · 数据按月份分别保存于本机浏览器</p>
+      <p>点击单元格即可勾选 / 取消，标记该步骤是否已完成 · 可开启 GitHub 自动同步
+        <span class="sync-badge local" id="syncBadge">本地模式</span>
+      </p>
     </div>
     <div class="actions">
+      <button class="btn" id="syncBtn">⤓ 同步设置</button>
       <button class="btn" id="addCompany">＋ 添加公司</button>
       <button class="btn" id="addStep">＋ 添加步骤</button>
       <button class="btn" id="exportBtn">导出</button>
@@ -173,11 +196,43 @@
   </div>
 </div>
 
+<!-- sync modal -->
+<div class="modal-mask" id="syncModal">
+  <div class="modal">
+    <h3>自动同步设置</h3>
+    <div class="row">
+      <label>同步模式</label>
+      <select id="syncMode">
+        <option value="local">仅本地保存（不联网）</option>
+        <option value="github">GitHub 自动同步</option>
+      </select>
+    </div>
+    <div id="ghFields">
+      <div class="row"><label>仓库 Owner</label><input id="syncOwner" placeholder="例如 terrykwok19-commits"></div>
+      <div class="row"><label>仓库名（数据保存在其中的 data.json）</label><input id="syncRepo" placeholder="例如 zhangwu-jindu"></div>
+      <div class="row">
+        <label>访问令牌（Token）</label>
+        <input id="syncToken" type="password" placeholder="github_pat_… 或 ghp_…" autocomplete="off">
+      </div>
+      <p class="hint">Token 仅保存在当前浏览器（localStorage），用于把勾选数据写入仓库的 data.json，不会上传到页面代码里。</p>
+    </div>
+    <div class="row status" id="syncStatus">—</div>
+    <div class="modal-btns">
+      <button class="btn" id="testSync">测试连接</button>
+      <button class="btn" id="syncNow">立即同步</button>
+      <button class="btn primary" id="saveSync">保存设置</button>
+      <button class="btn" id="closeSync">关闭</button>
+    </div>
+    <p class="hint">Token 创建方法（免费）：GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → 仓库访问仅选 zhangwu-jindu → 权限里 Contents 选 Read and write → 生成后粘贴到上方。</p>
+  </div>
+</div>
+
 <input type="file" id="fileInput" accept="application/json" style="display:none">
 <div class="toast" id="toast"></div>
 
 <script>
 const STORE_KEY = "jinada_progress_v2";
+const CFG_KEY = "jinada_sync_cfg";
 
 const COMPANIES = [
   "广州金哪达贸易有限公司","广州金哪达科技有限公司","广州超影拍科技有限公司",
@@ -195,6 +250,7 @@ function currentMonthKey(){
 // ---- state ----
 let store = load();
 let month = store.sel || store.months[0];
+let cfg = loadCfg();
 
 function load(){
   try{
@@ -211,16 +267,36 @@ function load(){
     na: JSON.parse(JSON.stringify(NA)),
     months: [mk],
     sel: mk,
+    updatedAt: 0,
     done: {}
   };
 }
-function save(){
+function persistRaw(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){}
+}
+function save(){
+  store.updatedAt = Date.now();
+  persistRaw();
+}
+function loadCfg(){
+  try{
+    const d = JSON.parse(localStorage.getItem(CFG_KEY));
+    if(d && typeof d === "object") return d;
+  }catch(e){}
+  return {mode:"local", owner:"terrykwok19-commits", repo:"zhangwu-jindu", token:""};
+}
+function saveCfg(){
+  try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
 }
 function toast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
-  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove("show"),1700);
+  clearTimeout(t._t); t._t = setTimeout(()=>t.classList.remove("show"),2400);
+}
+function badge(state, text){
+  const b = document.getElementById("syncBadge");
+  b.className = "sync-badge " + state;
+  b.textContent = text;
 }
 
 // ---- month helpers ----
@@ -258,6 +334,94 @@ function monthPct(m){
   return a? Math.round(d/a*100):0;
 }
 
+// ---- github sync ----
+function b64encode(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64decode(b64){
+  const bin = atob(b64.replace(/\s/g,""));
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+function ghHeaders(json){
+  const h = {Accept:"application/vnd.github+json"};
+  if(cfg.token) h.Authorization = "Bearer " + cfg.token;
+  if(json) h["Content-Type"] = "application/json";
+  return h;
+}
+async function fetchRemote(){
+  const url = "https://api.github.com/repos/" + cfg.owner + "/" + cfg.repo + "/contents/data.json";
+  const r = await fetch(url, {headers: ghHeaders(false)});
+  if(r.status === 404) return null;
+  if(!r.ok) throw new Error("读取远程数据失败 (HTTP " + r.status + ")");
+  const j = await r.json();
+  return { data: JSON.parse(b64decode(j.content)), sha: j.sha };
+}
+async function pushRemote(){
+  save();
+  const url = "https://api.github.com/repos/" + cfg.owner + "/" + cfg.repo + "/contents/data.json";
+  const body = {
+    message: "自动同步 " + new Date().toLocaleString("zh-CN", {hour12:false}),
+    content: b64encode(JSON.stringify(store, null, 2))
+  };
+  const cur = await fetch(url, {headers: ghHeaders(false)});
+  if(cur.ok){ const j = await cur.json(); body.sha = j.sha; }
+  const r = await fetch(url, {method:"PUT", headers: ghHeaders(true), body: JSON.stringify(body)});
+  if(!r.ok) throw new Error("写入远程数据失败 (HTTP " + r.status + ")");
+}
+async function pullAndApply(quiet){
+  try{
+    const remote = await fetchRemote();
+    if(!remote){
+      await pushRemote();
+      badge("ok", "已创建远程数据");
+      if(!quiet) toast("已创建远程数据");
+      return;
+    }
+    const rd = remote.data;
+    const remoteTs = rd.updatedAt || 0;
+    const localTs = store.updatedAt || 0;
+    if(remoteTs > localTs){
+      store = rd;
+      if(!store.sel || !store.months.includes(store.sel)) store.sel = store.months[0];
+      month = store.sel;
+      persistRaw();
+      renderAll();
+      badge("ok", "已同步最新数据");
+      if(!quiet) toast("已同步最新数据");
+    }else if(localTs > remoteTs){
+      await pushRemote();
+      badge("ok", "已上传本机数据");
+      if(!quiet) toast("已上传本机数据");
+    }else{
+      badge("ok", "数据已是最新");
+    }
+  }catch(e){
+    badge("err", "同步失败");
+    if(!quiet) toast("同步失败：" + e.message);
+    else badge("err", "离线");
+  }
+}
+let syncTimer = null;
+function scheduleSync(){
+  if(cfg.mode !== "github") return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async ()=>{
+    badge("syncing", "同步中…");
+    try{
+      await pushRemote();
+      badge("ok", "已同步 " + new Date().toLocaleTimeString("zh-CN", {hour:"2-digit", minute:"2-digit"}));
+    }catch(e){
+      badge("err", "同步失败");
+      toast("同步失败：" + e.message);
+    }
+  }, 1500);
+}
+
 // ---- render ----
 function renderMonths(){
   const el = document.getElementById("months");
@@ -265,14 +429,14 @@ function renderMonths(){
 
   const prev = document.createElement("div");
   prev.className = "monthchip nav"; prev.textContent = "◀"; prev.title = "上个月";
-  prev.onclick = ()=>{ const k=shiftMonth(month,-1); ensureMonth(k); month=k; store.sel=k; save(); renderAll(); };
+  prev.onclick = ()=>{ const k=shiftMonth(month,-1); ensureMonth(k); month=k; store.sel=k; save(); scheduleSync(); renderAll(); };
   el.appendChild(prev);
 
   store.months.forEach(k=>{
     const c = document.createElement("div");
     c.className = "monthchip" + (k===month?" active":"");
     c.innerHTML = '<span>'+monthShort(k)+'</span><span class="mp">'+monthPct(k)+'%</span>';
-    c.onclick = ()=>{ month=k; store.sel=k; save(); renderAll(); };
+    c.onclick = ()=>{ month=k; store.sel=k; save(); scheduleSync(); renderAll(); };
     el.appendChild(c);
   });
 
@@ -284,13 +448,13 @@ function renderMonths(){
     if(!inp) return;
     const key = inp.trim();
     if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)){ toast("格式不正确，应为 YYYY-MM"); return; }
-    ensureMonth(key); month=key; store.sel=key; save(); renderAll(); toast("已新建月份 "+monthLabel(key));
+    ensureMonth(key); month=key; store.sel=key; save(); scheduleSync(); renderAll(); toast("已新建月份 "+monthLabel(key));
   };
   el.appendChild(add);
 
   const next = document.createElement("div");
   next.className = "monthchip nav"; next.textContent = "▶"; next.title = "下个月";
-  next.onclick = ()=>{ const k=shiftMonth(month,1); ensureMonth(k); month=k; store.sel=k; save(); renderAll(); };
+  next.onclick = ()=>{ const k=shiftMonth(month,1); ensureMonth(k); month=k; store.sel=k; save(); scheduleSync(); renderAll(); };
   el.appendChild(next);
 }
 
@@ -353,7 +517,7 @@ function renderGrid(){
           setDone(month, company, step, nd);
           cell.className = "cell" + (nd?" done":"");
           cell.textContent = nd ? "✓" : "□";
-          updateSummary(); renderMonths();
+          updateSummary(); renderMonths(); scheduleSync();
         };
       }
       td.appendChild(cell);
@@ -404,14 +568,14 @@ function removeCompany(company){
   store.companies = store.companies.filter(c=>c!==company);
   if(store.na[company]) delete store.na[company];
   for(const m in store.done) if(store.done[m][company]) delete store.done[m][company];
-  save(); renderAll(); toast("已删除公司");
+  save(); scheduleSync(); renderAll(); toast("已删除公司");
 }
 function removeStep(step){
   if(!confirm("确定删除步骤「"+step+"」？该步骤在所有月份的勾选也会清除。")) return;
   store.steps = store.steps.filter(s=>s!==step);
   for(const c in store.na) store.na[c] = store.na[c].filter(s=>s!==step);
   for(const m in store.done) for(const c in store.done[m]) delete store.done[m][c][step];
-  save(); renderAll(); toast("已删除步骤");
+  save(); scheduleSync(); renderAll(); toast("已删除步骤");
 }
 
 document.getElementById("addCompany").onclick = ()=>{
@@ -419,19 +583,19 @@ document.getElementById("addCompany").onclick = ()=>{
   if(!name) return;
   if(store.companies.includes(name)){ toast("该公司已存在"); return; }
   store.companies.push(name);
-  save(); renderAll(); toast("已添加公司");
+  save(); scheduleSync(); renderAll(); toast("已添加公司");
 };
 document.getElementById("addStep").onclick = ()=>{
   const name = prompt("输入新步骤名称：");
   if(!name) return;
   if(store.steps.includes(name)){ toast("该步骤已存在"); return; }
   store.steps.push(name);
-  save(); renderAll(); toast("已添加步骤");
+  save(); scheduleSync(); renderAll(); toast("已添加步骤");
 };
 document.getElementById("resetBtn").onclick = ()=>{
   if(!confirm("确定清空「"+monthLabel(month)+"」的全部勾选记录？")) return;
   store.done[month] = {};
-  save(); renderAll(); toast("已重置 "+monthLabel(month));
+  save(); scheduleSync(); renderAll(); toast("已重置 "+monthLabel(month));
 };
 document.getElementById("printBtn").onclick = ()=>window.print();
 
@@ -454,7 +618,7 @@ document.getElementById("fileInput").onchange = (e)=>{
         store = d;
         if(!store.sel || !store.months.includes(store.sel)) store.sel = store.months[0];
         month = store.sel;
-        save(); renderAll(); toast("已导入备份");
+        save(); scheduleSync(); renderAll(); toast("已导入备份");
       } else toast("文件格式不正确");
     }catch(err){ toast("导入失败：解析错误"); }
   };
@@ -462,7 +626,79 @@ document.getElementById("fileInput").onchange = (e)=>{
   e.target.value = "";
 };
 
+// ---- sync settings UI ----
+const syncModal = document.getElementById("syncModal");
+document.getElementById("syncBtn").onclick = ()=>{
+  document.getElementById("syncMode").value = cfg.mode;
+  document.getElementById("syncOwner").value = cfg.owner;
+  document.getElementById("syncRepo").value = cfg.repo;
+  document.getElementById("syncToken").value = cfg.token || "";
+  document.getElementById("syncStatus").textContent = "";
+  syncModal.classList.add("show");
+};
+document.getElementById("closeSync").onclick = ()=>syncModal.classList.remove("show");
+syncModal.addEventListener("click", e=>{ if(e.target===syncModal) syncModal.classList.remove("show"); });
+
+function readForm(){
+  return {
+    mode: document.getElementById("syncMode").value,
+    owner: document.getElementById("syncOwner").value.trim(),
+    repo: document.getElementById("syncRepo").value.trim(),
+    token: document.getElementById("syncToken").value.trim()
+  };
+}
+document.getElementById("saveSync").onclick = ()=>{
+  const f = readForm();
+  if(f.mode === "github"){
+    if(!f.owner || !f.repo){ document.getElementById("syncStatus").textContent = "请填写仓库 Owner 和仓库名"; return; }
+    if(!f.token){ document.getElementById("syncStatus").textContent = "自动同步需要 Token，请粘贴访问令牌（或改用仅本地模式）"; return; }
+  }
+  cfg = f; saveCfg();
+  syncModal.classList.remove("show");
+  if(cfg.mode === "github"){
+    badge("syncing", "拉取中…");
+    pullAndApply(false);
+  }else{
+    badge("local", "本地模式");
+    toast("已切换为仅本地模式");
+  }
+};
+document.getElementById("testSync").onclick = async ()=>{
+  const f = readForm();
+  if(f.mode === "github" && !f.token){ document.getElementById("syncStatus").textContent = "请先填写 Token"; return; }
+  cfg = f; // use form values for the test
+  document.getElementById("syncStatus").textContent = "测试中…";
+  try{
+    const remote = await fetchRemote();
+    document.getElementById("syncStatus").textContent = remote
+      ? "连接成功，已读取远程 data.json（"+remote.data.companies.length+" 家公司）"
+      : "连接成功，但远程还没有 data.json";
+  }catch(e){
+    document.getElementById("syncStatus").textContent = "连接失败：" + e.message;
+  }
+};
+document.getElementById("syncNow").onclick = ()=>{
+  if(cfg.mode !== "github"){ document.getElementById("syncStatus").textContent = "当前为本地模式，请先切换到自动同步"; return; }
+  document.getElementById("syncStatus").textContent = "同步中…";
+  pullAndApply(false).then(()=>{ document.getElementById("syncStatus").textContent = "同步完成"; });
+};
+
+// ---- init ----
 renderAll();
+if(cfg.mode === "github"){
+  if(!cfg.token){
+    badge("err", "需要 Token");
+    toast("请在「同步设置」中粘贴 GitHub Token 以开启自动同步");
+  }else{
+    badge("syncing", "拉取中…");
+    pullAndApply(true);
+  }
+}else{
+  badge("local", "本地模式");
+}
+window.addEventListener("focus", ()=>{
+  if(cfg.mode === "github" && cfg.token && !syncTimer) pullAndApply(true);
+});
 </script>
 </body>
 </html>

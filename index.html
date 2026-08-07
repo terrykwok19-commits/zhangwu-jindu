@@ -142,8 +142,8 @@
   <header class="top">
     <div class="title">
       <h1>账务完成进度表</h1>
-      <p>点击单元格即可勾选 / 取消，标记该步骤是否已完成 · 可开启 GitHub 自动同步
-        <span class="sync-badge local" id="syncBadge">本地模式</span>
+      <p>点击单元格即可勾选 / 取消，标记该步骤是否已完成 · 自动云端同步
+        <span class="sync-badge local" id="syncBadge">同步中…</span>
       </p>
     </div>
     <div class="actions">
@@ -214,7 +214,7 @@
         <label>访问令牌（Token）</label>
         <input id="syncToken" type="password" placeholder="github_pat_… 或 ghp_…" autocomplete="off">
       </div>
-      <p class="hint">Token 仅保存在当前浏览器（localStorage），用于把勾选数据写入仓库的 data.json，不会上传到页面代码里。</p>
+      <p class="hint">Token 仅保存在当前浏览器（localStorage），用于把勾选数据写入仓库的 data.json，不会写入页面或仓库。也可直接使用我发给你的「专属配置链接」一键配置。</p>
     </div>
     <div class="row status" id="syncStatus">—</div>
     <div class="modal-btns">
@@ -232,7 +232,7 @@
 
 <script>
 const STORE_KEY = "jinada_progress_v2";
-const CFG_KEY = "jinada_sync_cfg";
+const CFG_KEY = "jinada_sync_cfg_v3";
 
 const COMPANIES = [
   "广州金哪达贸易有限公司","广州金哪达科技有限公司","广州超影拍科技有限公司",
@@ -279,11 +279,12 @@ function save(){
   persistRaw();
 }
 function loadCfg(){
+  const def = {mode:"github", owner:"terrykwok19-commits", repo:"zhangwu-jindu", token:""};
   try{
     const d = JSON.parse(localStorage.getItem(CFG_KEY));
     if(d && typeof d === "object") return d;
   }catch(e){}
-  return {mode:"local", owner:"terrykwok19-commits", repo:"zhangwu-jindu", token:""};
+  return def;
 }
 function saveCfg(){
   try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }catch(e){}
@@ -684,11 +685,26 @@ document.getElementById("syncNow").onclick = ()=>{
 };
 
 // ---- init ----
+// 专属配置链接：URL 带 ?setup=<token> 时，自动把 Token 存入本浏览器并清理地址栏
+(function applySetupLink(){
+  try{
+    const p = new URLSearchParams(location.search);
+    const t = (p.get("setup") || "").trim();
+    if(t){
+      cfg.token = t;
+      cfg.mode = "github";
+      saveCfg();
+      history.replaceState(null, "", location.pathname + location.hash);
+      toast("自动同步配置已保存到本浏览器");
+    }
+  }catch(e){}
+})();
+
 renderAll();
 if(cfg.mode === "github"){
   if(!cfg.token){
-    badge("err", "需要 Token");
-    toast("请在「同步设置」中粘贴 GitHub Token 以开启自动同步");
+    badge("err", "未配置同步");
+    toast("点击我发送的「专属配置链接」即可一键开启自动同步，无需手动设置");
   }else{
     badge("syncing", "拉取中…");
     pullAndApply(true);

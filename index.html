@@ -207,7 +207,7 @@
         <option value="github">GitHub 同步（需令牌）</option>
         <option value="local">仅本地保存（不联网）</option>
       </select>
-      <p class="hint" id="blobHint">默认使用免费云端 JSON 存储（jsonblob.com），打开即自动同步，无需令牌、无需任何配置。数据桶公开可读写，仅适合保存非敏感进度数据；如需私密，请选择 GitHub 同步。</p>
+      <p class="hint" id="blobHint">默认使用免费云端 JSON 存储（jsonblob.com），打开即自动同步，无需令牌、无需任何配置。数据桶公开可读写，仅适合保存非敏感进度数据；如需私密，请选择 GitHub 同步。若云端数据桶失效，页面会自动重建新数据桶并继续同步。</p>
     </div>
     <div id="ghFields">
       <div class="row"><label>仓库 Owner</label><input id="syncOwner" placeholder="例如 terrykwok19-commits"></div>
@@ -237,8 +237,12 @@ const STORE_KEY = "jinada_progress_v2";
 const CFG_KEY = "jinada_sync_cfg_v4";
 // 默认同步后端：免费云端 JSON 存储（jsonblob.com），零配置、无需令牌，打开即自动同步。
 // 注意：该数据桶公开可读写，只适合保存完成进度等非敏感数据（可随时导出备份）。
-const BLOB_ID = "019fdb09-cee4-7a9e-b6de-f8496a3f34e8";
-const BLOB_URL = "https://jsonblob.com/api/jsonBlob/" + BLOB_ID;
+// 免费数据桶闲置过久会被清理（GET 返回 404），页面会自动重建新桶并把新桶 ID 存入本浏览器 localStorage。
+const DEFAULT_BLOB_ID = "019fe166-eee2-7d40-9dd6-67efcf1976a9";
+const BLOB_API = "https://jsonblob.com/api/jsonBlob";
+function blobUrl(){
+  return BLOB_API + "/" + (cfg.blobId || DEFAULT_BLOB_ID);
+}
 
 const COMPANIES = [
   "广州金哪达贸易有限公司","广州金哪达科技有限公司","广州超影拍科技有限公司",
@@ -285,7 +289,7 @@ function save(){
   persistRaw();
 }
 function loadCfg(){
-  const def = {mode:"blob", owner:"terrykwok19-commits", repo:"zhangwu-jindu", token:""};
+  const def = {mode:"blob", blobId:DEFAULT_BLOB_ID, owner:"terrykwok19-commits", repo:"zhangwu-jindu", token:""};
   try{
     const d = JSON.parse(localStorage.getItem(CFG_KEY));
     if(d && typeof d === "object" && ["blob","github","local"].includes(d.mode)) return d;
@@ -369,7 +373,8 @@ async function fetchRemote(){
     const j = await r.json();
     return { data: JSON.parse(b64decode(j.content)), sha: j.sha };
   }
-  const r = await fetch(BLOB_URL);
+  const r = await fetch(blobUrl());
+  if(r.status === 404) return null; // 云端数据桶已失效 → 视为无远程数据，稍后自动重建
   if(!r.ok) throw new Error("读取云端数据失败 (HTTP " + r.status + ")");
   return { data: await r.json() };
 }
@@ -386,7 +391,19 @@ async function pushRemote(){
     const r = await fetch(url, {method:"PUT", headers: ghHeaders(true), body: JSON.stringify(body)});
     if(!r.ok) throw new Error("写入远程数据失败 (HTTP " + r.status + ")");
   }else{
-    const r = await fetch(BLOB_URL, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(store)});
+    let url = blobUrl();
+    let r = await fetch(url, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(store)});
+    if(r.status === 404){
+      // 数据桶已被 jsonblob 清理 → 自动重建新数据桶，并把新桶 ID 存入本浏览器
+      const cr = await fetch(BLOB_API, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(store)});
+      if(!cr.ok) throw new Error("重建云端数据桶失败 (HTTP " + cr.status + ")");
+      const loc = (cr.headers.get("Location") || "").split("/");
+      const id = loc[loc.length-1];
+      if(!id) throw new Error("重建云端数据桶失败：未返回新桶地址");
+      cfg.blobId = id; saveCfg();
+      url = BLOB_API + "/" + id;
+      r = await fetch(url, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(store)});
+    }
     if(!r.ok) throw new Error("写入云端数据失败 (HTTP " + r.status + ")");
   }
 }

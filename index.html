@@ -150,10 +150,12 @@
       <button class="btn" id="syncBtn">⤓ 同步设置</button>
       <button class="btn" id="addCompany">＋ 添加公司</button>
       <button class="btn" id="addStep">＋ 添加步骤</button>
-      <button class="btn" id="exportBtn">导出</button>
-      <button class="btn" id="importBtn">导入</button>
+      <button class="btn" id="templateBtn">下载模板</button>
+      <button class="btn" id="exportBtn">导出 Excel</button>
+      <button class="btn" id="importBtn">导入 Excel</button>
       <button class="btn" id="printBtn">打印</button>
       <button class="btn" id="resetBtn">重置本月</button>
+      <button class="btn" id="deleteMonthBtn">删除本月</button>
     </div>
   </header>
 
@@ -192,7 +194,7 @@
   <div class="legend">
     <span><i class="lg-done">✓</i>已完成</span>
     <span><i class="lg-todo">□</i>待办</span>
-    <span style="margin-left:auto;color:var(--txt3)">提示：顶部可切换 / 新建月份，勾选按月份独立保存；悬停公司或步骤可删除。</span>
+    <span style="margin-left:auto;color:var(--txt3)">提示：顶部可切换 / 新建 / 删除月份，勾选按月份独立保存；悬停公司或步骤可删除；数据可导出 / 导入 Excel（可先「下载模板」查看填写方式）。</span>
   </div>
 </div>
 
@@ -229,9 +231,10 @@
   </div>
 </div>
 
-<input type="file" id="fileInput" accept="application/json" style="display:none">
+<input type="file" id="fileInput" accept=".xlsx,.xls,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" style="display:none">
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const STORE_KEY = "jinada_progress_v2";
 const CFG_KEY = "jinada_sync_cfg_v4";
@@ -632,31 +635,145 @@ document.getElementById("resetBtn").onclick = ()=>{
   save(); scheduleSync(); renderAll(); toast("已重置 "+monthLabel(month));
 };
 document.getElementById("printBtn").onclick = ()=>window.print();
+document.getElementById("deleteMonthBtn").onclick = ()=>removeMonth(month);
 
-document.getElementById("exportBtn").onclick = ()=>{
-  const blob = new Blob([JSON.stringify(store,null,2)],{type:"application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "账务进度_备份_"+new Date().toISOString().slice(0,10)+".json";
-  a.click(); URL.revokeObjectURL(a.href);
-  toast("已导出备份");
-};
+function removeMonth(key){
+  if(!confirm("确定删除「"+monthLabel(key)+"」吗？该月份的全部勾选记录将被永久删除。")) return;
+  delete store.done[key];
+  store.months = store.months.filter(m=>m!==key);
+  if(!store.months.length){
+    const mk = currentMonthKey();
+    store.months.push(mk);
+    store.done[mk] = store.done[mk] || {};
+  }
+  if(!store.months.includes(store.sel)) store.sel = store.months[0];
+  month = store.sel;
+  save(); scheduleSync(); renderAll(); toast("已删除月份 "+monthLabel(key));
+}
+
+// ---- Excel 导入导出 ----
+function xlsxOk(){
+  if(typeof XLSX === "undefined"){ toast("Excel 处理库未加载，请联网后刷新页面"); return false; }
+  return true;
+}
+function putSheet(wb, name, rows){
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{wch:12},{wch:28},{wch:30},{wch:10}].slice(0, rows[0].length);
+  XLSX.utils.book_append_sheet(wb, ws, name);
+}
+function exportXlsx(){
+  if(!xlsxOk()) return;
+  const wb = XLSX.utils.book_new();
+  putSheet(wb, "公司列表", [["公司名称"], ...store.companies.map(c=>[c])]);
+  putSheet(wb, "步骤列表", [["步骤名称"], ...store.steps.map(s=>[s])]);
+  putSheet(wb, "月份列表", [["月份"], ...store.months.map(m=>[m])]);
+  const rows = [["月份","公司名称","步骤","状态"]];
+  store.months.forEach(m=>{
+    store.companies.forEach(c=>{
+      store.steps.forEach(s=>{ if(isDone(m,c,s)) rows.push([m,c,s,"✓"]); });
+    });
+  });
+  putSheet(wb, "勾选记录", rows);
+  XLSX.writeFile(wb, "账务进度_备份_"+new Date().toISOString().slice(0,10)+".xlsx");
+  toast("已导出 Excel 备份");
+}
+function downloadTemplate(){
+  if(!xlsxOk()) return;
+  const wb = XLSX.utils.book_new();
+  putSheet(wb, "说明", [
+    ["账务完成进度表 · 导入模板"],
+    ["1. 依次填写「公司列表」「步骤列表」「月份列表」三张表；"],
+    ["2. 「勾选记录」每行表示一次完成标记：月份、公司名称、步骤、状态；"],
+    ["3. 「状态」填 ✓ 或 1 或 是 表示已完成，留空表示未完成；"],
+    ["4. 表格中的示例 / 括号提示行仅作演示，正式导入前请删除（否则会作为真实数据导入）；"],
+    ["5. 使用「导出 Excel」生成的文件也可以直接修改后重新导入。"]
+  ]);
+  putSheet(wb, "公司列表", [
+    ["公司名称"],
+    ...COMPANIES.map(c=>[c]),
+    ["（新增公司请追加在此行之后）"]
+  ]);
+  putSheet(wb, "步骤列表", [
+    ["步骤名称"],
+    ...STEPS.map(s=>[s]),
+    ["（新增步骤请追加在此行之后）"]
+  ]);
+  putSheet(wb, "月份列表", [
+    ["月份"],
+    ["2026-08"],
+    ["2026-09"],
+    ["（格式为 YYYY-MM，例如 2026-09）"]
+  ]);
+  putSheet(wb, "勾选记录", [
+    ["月份","公司名称","步骤","状态"],
+    ["2026-08","广州金哪达贸易有限公司","收款","✓"],
+    ["2026-08","广州金哪达贸易有限公司","付款",""],
+    ["2026-08","广州金哪达科技有限公司","销项","1"],
+    ["（示例行导入前请删除）","","",""]
+  ]);
+  XLSX.writeFile(wb, "账务进度_导入模板.xlsx");
+  toast("已下载模板，请填写后导入");
+}
+function importXlsxArray(buf){
+  const wb = XLSX.read(new Uint8Array(buf), {type:"array"});
+  const byName = {};
+  wb.SheetNames.forEach(n=>byName[n.replace(/\s/g,"")] = n);
+  const rowsOf = n=>{
+    const sn = byName[n.replace(/\s/g,"")];
+    return sn ? XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:""}) : [];
+  };
+  const clean = rows=>{
+    const out=[];
+    rows.forEach((r,i)=>{
+      const v=String(r[0]||"").trim();
+      if(i===0) return; // 跳过表头行
+      if(v && !v.startsWith("（") && out.indexOf(v)<0) out.push(v);
+    });
+    return out;
+  };
+  const companies = clean(rowsOf("公司列表"));
+  const steps = clean(rowsOf("步骤列表"));
+  const months = [];
+  rowsOf("月份列表").forEach(r=>{ const v=String(r[0]||"").trim(); if(/^\d{4}-(0[1-9]|1[0-2])$/.test(v) && months.indexOf(v)<0) months.push(v); });
+  if(!companies.length || !steps.length) throw new Error("缺少公司或步骤数据，请检查模板");
+  if(!months.length) months.push(currentMonthKey());
+  const done = {};
+  const OK = ["✓","√","1","是","yes","true","已完成","完成"];
+  rowsOf("勾选记录").forEach(r=>{
+    const m=String(r[0]||"").trim(), c=String(r[1]||"").trim(), s=String(r[2]||"").trim(), st=String(r[3]||"").trim().toLowerCase();
+    if(/^\d{4}-(0[1-9]|1[0-2])$/.test(m) && c && s && OK.indexOf(st)>=0){
+      done[m]=done[m]||{}; done[m][c]=done[m][c]||{}; done[m][c][s]=true;
+    }
+  });
+  store = {companies, steps, na:{}, months, sel:months[0], updatedAt:Date.now(), done};
+  month = store.sel;
+  save(); scheduleSync(); renderAll(); toast("已导入 Excel 备份");
+}
+document.getElementById("exportBtn").onclick = exportXlsx;
+document.getElementById("templateBtn").onclick = downloadTemplate;
 document.getElementById("importBtn").onclick = ()=>document.getElementById("fileInput").click();
 document.getElementById("fileInput").onchange = (e)=>{
   const f = e.target.files[0]; if(!f) return;
+  const name = (f.name||"").toLowerCase();
   const r = new FileReader();
-  r.onload = ()=>{
-    try{
-      const d = JSON.parse(r.result);
-      if(d && d.companies && d.done){
-        store = d;
-        if(!store.sel || !store.months.includes(store.sel)) store.sel = store.months[0];
-        month = store.sel;
-        save(); scheduleSync(); renderAll(); toast("已导入备份");
-      } else toast("文件格式不正确");
-    }catch(err){ toast("导入失败：解析错误"); }
-  };
-  r.readAsText(f);
+  if(name.endsWith(".json")){
+    r.onload = ()=>{
+      try{
+        const d = JSON.parse(r.result);
+        if(d && d.companies && d.done){
+          store = d;
+          if(!store.sel || !store.months.includes(store.sel)) store.sel = store.months[0];
+          month = store.sel;
+          save(); scheduleSync(); renderAll(); toast("已导入备份");
+        } else toast("文件格式不正确");
+      }catch(err){ toast("导入失败：" + err.message); }
+    };
+    r.readAsText(f);
+  }else{
+    if(!xlsxOk()){ e.target.value = ""; return; }
+    r.onload = ()=>{ try{ importXlsxArray(r.result); }catch(err){ toast("导入失败：" + err.message); } };
+    r.readAsArrayBuffer(f);
+  }
   e.target.value = "";
 };
 

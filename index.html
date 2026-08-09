@@ -105,6 +105,7 @@
     cursor:pointer;user-select:none;font-size:18px;color:var(--txt3);transition:all .15s}
   .cell:hover{background:#f4f3ec}
   .cell.done{color:var(--done2);background:var(--done-bg);font-weight:700}
+  .cell.pending{color:var(--warn);background:rgba(217,119,6,0.12);font-weight:700}
   .cell.na{color:var(--txt3);background:var(--na);cursor:not-allowed;font-size:15px}
   .cell.na:hover{background:var(--na)}
   .progress-cell{padding:0 14px !important;width:150px}
@@ -117,6 +118,7 @@
   .legend i{font-style:normal;display:inline-flex;width:20px;height:20px;border-radius:6px;
     align-items:center;justify-content:center;margin-right:6px;vertical-align:-4px;font-size:12px}
   .lg-done{background:var(--done-bg);color:var(--done2);border:1px solid rgba(101,163,13,0.4)}
+  .lg-pending{background:rgba(217,119,6,0.12);color:var(--warn);border:1px solid rgba(217,119,6,0.4)}
   .lg-todo{background:var(--panel);color:var(--txt3);border:1px solid var(--line2)}
   .lg-na{background:var(--na);color:var(--txt3);border:1px solid var(--line2)}
 
@@ -150,6 +152,7 @@
     .tablecard::-webkit-scrollbar{display:none}
     thead th,tbody td.company{background:#f5f5f5 !important}
     .cell.done{color:#000;background:#e7f6da !important}
+    .cell.pending{color:#92400e;background:#fef3c7 !important}
     .ring{background:conic-gradient(#65a30d calc(var(--p)*1%),#ccc 0) !important}
     .ring::after{background:#fff !important}
     .title h1{color:#000}
@@ -212,8 +215,10 @@
 
   <div class="legend">
     <span><i class="lg-done">✓</i>已完成</span>
+    <span><i class="lg-pending">$</i>申报待付款</span>
     <span><i class="lg-todo">□</i>待办</span>
-    <span style="margin-left:auto;color:var(--txt3)">提示：顶部可切换 / 新建 / 删除月份，勾选按月份独立保存；悬停公司或步骤可删除；数据可导出 / 导入 Excel（可先「下载模板」查看填写方式）。</span>
+    <span><i class="lg-na">—</i>不用处理</span>
+    <span style="margin-left:auto;color:var(--txt3)">提示：点击单元格循环切换状态（□→✓→$→—）；顶部可切换/新建/删除月份，勾选按月份独立保存；悬停公司或步骤可删除；数据可导出/导入 Excel。</span>
   </div>
 </div>
 
@@ -290,7 +295,10 @@ function load(){
     const raw = localStorage.getItem(STORE_KEY);
     if(raw){
       const d = JSON.parse(raw);
-      if(d && d.companies && d.done) return d;
+      if(d && d.companies && d.done){
+        if(!d.pending) d.pending = {};
+        return d;
+      }
     }
   }catch(e){}
   const mk = currentMonthKey();
@@ -298,6 +306,7 @@ function load(){
     companies: COMPANIES.slice(),
     steps: STEPS.slice(),
     na: JSON.parse(JSON.stringify(NA)),
+    pending: {},
     months: [mk],
     sel: mk,
     updatedAt: 0,
@@ -351,15 +360,40 @@ function isNA(company, step){
   const na = store.na[company];
   return Array.isArray(na) && na.includes(step);
 }
+function isPending(m, company, step){
+  return !!(store.pending && store.pending[m] && store.pending[m][company] && store.pending[m][company][step]);
+}
 function isDone(m, company, step){
   return !!(store.done[m] && store.done[m][company] && store.done[m][company][step]);
 }
-function setDone(m, company, step, val){
+function setCellState(m, company, step, state){
   store.done[m] = store.done[m] || {};
   store.done[m][company] = store.done[m][company] || {};
-  if(val) store.done[m][company][step] = true;
-  else delete store.done[m][company][step];
+  store.pending[m] = store.pending[m] || {};
+  store.pending[m][company] = store.pending[m][company] || {};
+  if(state === "done"){
+    store.done[m][company][step] = true;
+    delete store.pending[m][company][step];
+  }else if(state === "pending"){
+    store.pending[m][company][step] = true;
+    delete store.done[m][company][step];
+  }else{
+    delete store.done[m][company][step];
+    delete store.pending[m][company][step];
+  }
   save();
+}
+function getCellState(m, company, step){
+  if(isNA(company, step)) return "na";
+  if(isDone(m, company, step)) return "done";
+  if(isPending(m, company, step)) return "pending";
+  return "todo";
+}
+function cycleCellState(m, company, step){
+  const cur = getCellState(m, company, step);
+  const cycle = {"todo":"done","done":"pending","pending":"na","na":"todo"};
+  setCellState(m, company, step, cycle[cur]);
+  return cycle[cur];
 }
 function activeSteps(company){ return store.steps.filter(s=>!isNA(company,s)).length; }
 function doneSteps(company, m){ return store.steps.filter(s=>!isNA(company,s) && isDone(m,company,s)).length; }
@@ -444,6 +478,7 @@ async function pullAndApply(quiet){
     const localTs = store.updatedAt || 0;
     if(remoteTs > localTs){
       store = rd;
+      if(!store.pending) store.pending = {};
       if(!store.sel || !store.months.includes(store.sel)) store.sel = store.months[0];
       month = store.sel;
       persistRaw();
@@ -597,20 +632,17 @@ function renderGrid(){
     store.steps.forEach(step=>{
       const td = document.createElement("td");
       const cell = document.createElement("div");
-      if(isNA(company, step)){
-        cell.className = "cell na"; cell.textContent = "—";
-      }else{
-        const done = isDone(month, company, step);
-        cell.className = "cell" + (done?" done":"");
-        cell.textContent = done ? "✓" : "□";
-        cell.onclick = ()=>{
-          const nd = !isDone(month, company, step);
-          setDone(month, company, step, nd);
-          cell.className = "cell" + (nd?" done":"");
-          cell.textContent = nd ? "✓" : "□";
-          updateSummary(); renderMonths(); scheduleSync();
-        };
-      }
+      const state = getCellState(month, company, step);
+      const stateClass = {"todo":"","done":" done","pending":" pending","na":" na"};
+      const stateText = {"todo":"□","done":"✓","pending":"$","na":"—"};
+      cell.className = "cell" + (stateClass[state]||"");
+      cell.textContent = stateText[state];
+      cell.onclick = ()=>{
+        const newState = cycleCellState(month, company, step);
+        cell.className = "cell" + (stateClass[newState]||"");
+        cell.textContent = stateText[newState];
+        updateSummary(); renderMonths(); scheduleSync();
+      };
       td.appendChild(cell);
       r.appendChild(td);
     });
@@ -659,6 +691,7 @@ function removeCompany(company){
   store.companies = store.companies.filter(c=>c!==company);
   if(store.na[company]) delete store.na[company];
   for(const m in store.done) if(store.done[m][company]) delete store.done[m][company];
+  for(const m in store.pending) if(store.pending[m][company]) delete store.pending[m][company];
   save(); scheduleSync(); renderAll(); toast("已删除公司");
 }
 function removeStep(step){
@@ -666,6 +699,7 @@ function removeStep(step){
   store.steps = store.steps.filter(s=>s!==step);
   for(const c in store.na) store.na[c] = store.na[c].filter(s=>s!==step);
   for(const m in store.done) for(const c in store.done[m]) delete store.done[m][c][step];
+  for(const m in store.pending) for(const c in store.pending[m]) delete store.pending[m][c][step];
   save(); scheduleSync(); renderAll(); toast("已删除步骤");
 }
 
@@ -686,6 +720,7 @@ document.getElementById("addStep").onclick = ()=>{
 document.getElementById("resetBtn").onclick = ()=>{
   if(!confirm("确定清空「"+monthLabel(month)+"」的全部勾选记录？")) return;
   store.done[month] = {};
+  store.pending[month] = {};
   save(); scheduleSync(); renderAll(); toast("已重置 "+monthLabel(month));
 };
 document.getElementById("printBtn").onclick = ()=>window.print();
@@ -694,11 +729,13 @@ document.getElementById("deleteMonthBtn").onclick = ()=>removeMonth(month);
 function removeMonth(key){
   if(!confirm("确定删除「"+monthLabel(key)+"」吗？该月份的全部勾选记录将被永久删除。")) return;
   delete store.done[key];
+  delete store.pending[key];
   store.months = store.months.filter(m=>m!==key);
   if(!store.months.length){
     const mk = currentMonthKey();
     store.months.push(mk);
     store.done[mk] = store.done[mk] || {};
+    store.pending[mk] = store.pending[mk] || {};
   }
   if(!store.months.includes(store.sel)) store.sel = store.months[0];
   month = store.sel;
@@ -724,7 +761,12 @@ function exportXlsx(){
   const rows = [["月份","公司名称","步骤","状态"]];
   store.months.forEach(m=>{
     store.companies.forEach(c=>{
-      store.steps.forEach(s=>{ if(isDone(m,c,s)) rows.push([m,c,s,"✓"]); });
+      store.steps.forEach(s=>{
+        const state = getCellState(m,c,s);
+        if(state === "done") rows.push([m,c,s,"✓"]);
+        else if(state === "pending") rows.push([m,c,s,"$"]);
+        else if(state === "na") rows.push([m,c,s,"—"]);
+      });
     });
   });
   putSheet(wb, "勾选记录", rows);
@@ -737,8 +779,8 @@ function downloadTemplate(){
   putSheet(wb, "说明", [
     ["账务完成进度表 · 导入模板"],
     ["1. 依次填写「公司列表」「步骤列表」「月份列表」三张表；"],
-    ["2. 「勾选记录」每行表示一次完成标记：月份、公司名称、步骤、状态；"],
-    ["3. 「状态」填 ✓ 或 1 或 是 表示已完成，留空表示未完成；"],
+    ["2. 「勾选记录」每行表示一次状态标记：月份、公司名称、步骤、状态；"],
+    ["3. 状态说明：✓ 或 1 表示已完成，$ 表示申报待付款，— 表示不用处理，留空表示待办；"],
     ["4. 表格中的示例 / 括号提示行仅作演示，正式导入前请删除（否则会作为真实数据导入）；"],
     ["5. 使用「导出 Excel」生成的文件也可以直接修改后重新导入。"]
   ]);
@@ -761,8 +803,9 @@ function downloadTemplate(){
   putSheet(wb, "勾选记录", [
     ["月份","公司名称","步骤","状态"],
     ["2026-08","广州金哪达贸易有限公司","收款","✓"],
-    ["2026-08","广州金哪达贸易有限公司","付款",""],
-    ["2026-08","广州金哪达科技有限公司","销项","1"],
+    ["2026-08","广州金哪达贸易有限公司","付款","$"],
+    ["2026-08","广州金哪达科技有限公司","销项","—"],
+    ["2026-08","广州金哪达科技有限公司","进项",""],
     ["（示例行导入前请删除）","","",""]
   ]);
   XLSX.writeFile(wb, "账务进度_导入模板.xlsx");
@@ -780,7 +823,7 @@ function importXlsxArray(buf){
     const out=[];
     rows.forEach((r,i)=>{
       const v=String(r[0]||"").trim();
-      if(i===0) return; // 跳过表头行
+      if(i===0) return;
       if(v && !v.startsWith("（") && out.indexOf(v)<0) out.push(v);
     });
     return out;
@@ -792,14 +835,24 @@ function importXlsxArray(buf){
   if(!companies.length || !steps.length) throw new Error("缺少公司或步骤数据，请检查模板");
   if(!months.length) months.push(currentMonthKey());
   const done = {};
-  const OK = ["✓","√","1","是","yes","true","已完成","完成"];
+  const pending = {};
+  const na = {};
+  const DONE_STATES = ["✓","√","1","是","yes","true","已完成","完成"];
+  const PENDING_STATES = ["$","待付款","申报待付款"];
+  const NA_STATES = ["—","-","不用处理","不处理","na"];
   rowsOf("勾选记录").forEach(r=>{
     const m=String(r[0]||"").trim(), c=String(r[1]||"").trim(), s=String(r[2]||"").trim(), st=String(r[3]||"").trim().toLowerCase();
-    if(/^\d{4}-(0[1-9]|1[0-2])$/.test(m) && c && s && OK.indexOf(st)>=0){
-      done[m]=done[m]||{}; done[m][c]=done[m][c]||{}; done[m][c][s]=true;
+    if(/^\d{4}-(0[1-9]|1[0-2])$/.test(m) && c && s){
+      if(DONE_STATES.indexOf(st)>=0){
+        done[m]=done[m]||{}; done[m][c]=done[m][c]||{}; done[m][c][s]=true;
+      }else if(PENDING_STATES.indexOf(st)>=0){
+        pending[m]=pending[m]||{}; pending[m][c]=pending[m][c]||{}; pending[m][c][s]=true;
+      }else if(NA_STATES.indexOf(st)>=0){
+        na[c]=na[c]||[]; if(na[c].indexOf(s)<0) na[c].push(s);
+      }
     }
   });
-  store = {companies, steps, na:{}, months, sel:months[0], updatedAt:Date.now(), done};
+  store = {companies, steps, na, pending, months, sel:months[0], updatedAt:Date.now(), done};
   month = store.sel;
   save(); scheduleSync(); renderAll(); toast("已导入 Excel 备份");
 }

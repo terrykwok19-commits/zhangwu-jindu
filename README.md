@@ -17,9 +17,21 @@
 
 直接打开 [GitHub Pages 地址](https://terrykwok19-commits.github.io/zhangwu-jindu/) 即可使用，或本地双击 `index.html`。
 
-### 自动同步（默认开启，零配置）
+### 多设备同步（推荐：GitHub 同步）
 
-**打开页面即自动同步，无需令牌、无需任何设置。**
-- 勾选后自动上传到免费云端 JSON 存储（jsonblob.com），打开 / 切回页面时自动拉取最新数据。
-- 数据桶公开可读写，仅适合保存完成进度等非敏感数据；同时每个浏览器 localStorage 都保留一份，可用「导出」随时备份。
-- 如需改用 GitHub 仓库 `data.json` 同步：在页面「⤓ 同步设置」选择 GitHub 同步并粘贴 Fine-grained token（仅存当前浏览器，不写入页面或仓库）。
+**每台要使用的电脑只需一次性配置**（约 1 分钟），之后该浏览器自动读写本仓库的 `data.json`：
+
+1. 先创建一个 Fine-grained token（GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens）：仓库访问仅选 `zhangwu-jindu`，权限里 Contents 选 **Read and write**。
+2. 在这台电脑的浏览器打开（把 `<你的token>` 换成上面生成的 token）：
+
+   ```
+   https://terrykwok19-commits.github.io/zhangwu-jindu/?setup=<你的token>
+   ```
+
+3. 页面会把 token 存入**当前浏览器**的 localStorage 并切换为 GitHub 同步，自动清理地址栏。之后勾选自动上传、打开 / 切回页面自动拉取最新数据。
+
+> 每台电脑都要做一次；token 只存在各自的浏览器里，不会写入页面或仓库。
+
+### 默认同步方式（未配置时）
+
+未配置 GitHub 同步的浏览器默认使用免费云端 JSON 存储（jsonblob.com）临时同步，数据桶公开可读写、闲置会被清理，仅适合临时查看；**正式使用请按上面的方法配置一次 GitHub 同步**。所有数据均可通过「导出 Excel」随时备份。

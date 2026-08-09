@@ -76,12 +76,12 @@
   .monthchip.nav{font-size:16px;min-width:44px;justify-content:center;color:var(--txt2)}
   .monthchip.nav:hover{color:var(--accent-ink)}
 
-  .tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto;box-shadow:var(--shadow);max-height:calc(100vh - 280px);scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+  .tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:auto;box-shadow:var(--shadow);scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
   .tablecard::-webkit-scrollbar{width:8px;height:8px}
   .tablecard::-webkit-scrollbar-track{background:transparent}
   .tablecard::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
   .tablecard::-webkit-scrollbar-thumb:hover{background:var(--txt3)}
-  table{border-collapse:separate;border-spacing:0;width:100%;min-width:720px}
+  table{border-collapse:separate;border-spacing:0;width:100%;min-width:900px}
   th,td{padding:0;border-bottom:1px solid var(--line)}
   thead th{position:sticky;top:0;z-index:3;background:#f3f2ec;
     font-size:12px;font-weight:600;color:var(--txt);text-align:center;vertical-align:middle;text-transform:uppercase;letter-spacing:0.5px;transition:opacity .2s,background .2s,border .2s}
@@ -91,23 +91,23 @@
   thead th .step-name:active{cursor:grabbing}
   thead th.dragging{opacity:0.4;background:var(--done-bg)}
   thead th.drag-over{border-left:3px solid var(--accent);transition:border .15s}
-  .th-company{left:0;z-index:4;text-align:left !important;min-width:210px}
-  .th-progress{min-width:150px}
+  .th-company{left:0;z-index:4;text-align:left !important;min-width:240px}
+  .th-progress{min-width:130px}
   tbody td.company{position:sticky;left:0;z-index:2;background:var(--panel);
-    font-size:13.5px;padding:0 14px;min-width:210px;white-space:nowrap}
+    font-size:13.5px;padding:0 14px;min-width:240px;white-space:nowrap}
   tbody td.company .cname{display:flex;align-items:center;gap:8px;height:48px}
   tbody tr:hover{background:rgba(22,20,18,0.02)}
   .delx{margin-left:auto;cursor:pointer;color:var(--txt3);font-size:15px;line-height:1;
     border:none;background:none;padding:2px 6px;border-radius:8px;opacity:0;transition:all .2s}
   tbody tr:hover .delx{opacity:1}
   .delx:hover{color:var(--err);background:rgba(220,38,38,0.1)}
-  .cell{height:48px;width:100%;min-width:96px;display:flex;align-items:center;justify-content:center;
-    cursor:pointer;user-select:none;font-size:18px;color:var(--txt3);transition:all .15s}
+  .cell{height:52px;width:100%;min-width:100px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;user-select:none;font-size:20px;color:var(--txt3);transition:all .15s}
   .cell:hover{background:#f4f3ec}
   .cell.done{color:var(--done2);background:var(--done-bg);font-weight:700}
   .cell.pending{color:var(--warn);background:rgba(217,119,6,0.12);font-weight:700}
-  .cell.na{color:var(--txt3);background:var(--na);cursor:not-allowed;font-size:15px}
-  .cell.na:hover{background:var(--na)}
+  .cell.na{color:var(--txt3);background:var(--na)}
+  .cell.na:hover{background:#e8e7df}
   .progress-cell{padding:0 14px !important;width:150px}
   .pbar{height:6px;border-radius:999px;background:#e8e6dd;overflow:hidden}
   .pbar > i{display:block;height:100%;background:linear-gradient(90deg,#a3e635,#65a30d);width:0;transition:width .35s}
@@ -153,6 +153,7 @@
     thead th,tbody td.company{background:#f5f5f5 !important}
     .cell.done{color:#000;background:#e7f6da !important}
     .cell.pending{color:#92400e;background:#fef3c7 !important}
+    .cell.na{color:#6b7280;background:#f3f4f6 !important}
     .ring{background:conic-gradient(#65a30d calc(var(--p)*1%),#ccc 0) !important}
     .ring::after{background:#fff !important}
     .title h1{color:#000}

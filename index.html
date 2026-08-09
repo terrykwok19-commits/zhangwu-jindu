@@ -371,15 +371,23 @@ function setCellState(m, company, step, state){
   store.done[m][company] = store.done[m][company] || {};
   store.pending[m] = store.pending[m] || {};
   store.pending[m][company] = store.pending[m][company] || {};
+  store.na[company] = store.na[company] || [];
   if(state === "done"){
     store.done[m][company][step] = true;
     delete store.pending[m][company][step];
+    store.na[company] = store.na[company].filter(s=>s!==step);
   }else if(state === "pending"){
     store.pending[m][company][step] = true;
     delete store.done[m][company][step];
+    store.na[company] = store.na[company].filter(s=>s!==step);
+  }else if(state === "na"){
+    delete store.done[m][company][step];
+    delete store.pending[m][company][step];
+    if(!store.na[company].includes(step)) store.na[company].push(step);
   }else{
     delete store.done[m][company][step];
     delete store.pending[m][company][step];
+    store.na[company] = store.na[company].filter(s=>s!==step);
   }
   save();
 }
